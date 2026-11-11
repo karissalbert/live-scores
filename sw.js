@@ -1,6 +1,6 @@
 // Pulse service worker: network-first for the app shell (so updates show on first reload),
 // cache fallback for offline, pass-through for the live scores API.
-const CACHE = 'pulse-v1';
+const CACHE = 'pulse-v2';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
