@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Scores — Working Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0B0E14; --card:#161C26; --line:#242D3B; --ink:#F4F6FA; --quiet:#9AA5B5; --accent:#3DDC84; }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:'Inter',system-ui,sans-serif; }
+  .phone { max-width:430px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+  .scroll { flex:1; padding:26px 20px 90px; display:flex; flex-direction:column; gap:16px; }
+  .overline { font-size:11px; font-weight:700; letter-spacing:2px; color:var(--quiet); }
+  h1 { margin:0; font-family:'Space Grotesk',sans-serif; font-size:30px; font-weight:700; letter-spacing:-0.5px; }
+  .head { display:flex; justify-content:space-between; align-items:flex-end; }
+  .livepill { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:800; color:var(--accent);
+    border:1px solid #243527; background:rgba(61,220,132,.08); border-radius:999px; padding:6px 12px; }
+  .livepill .dot { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .chips { display:flex; gap:7px; flex-wrap:wrap; }
+  .chip { background:transparent; border:1px solid #2A3240; border-radius:999px; color:var(--quiet);
+    font-family:inherit; font-size:12px; font-weight:600; padding:7px 12px; min-height:34px; cursor:pointer; }
+  .chip.on { background:var(--accent); border-color:var(--accent); color:#0B0E14; font-weight:700; }
+  .days { display:flex; gap:7px; }
+  .section { display:flex; flex-direction:column; gap:9px; }
+  .seclabel { font-size:11px; font-weight:700; letter-spacing:1.5px; color:var(--quiet); }
+  .seclabel em { font-style:normal; color:var(--accent); }
+  .card { display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--line);
+    border-radius:14px; padding:13px 15px; }
+  .card.live { border-color:#2E5C41; }
+  .teams { display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; }
+  .team { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; }
+  .team .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .logo { width:22px; height:22px; flex-shrink:0; border-radius:50%; background:#242D3B; object-fit:contain; }
+  .scores { display:flex; flex-direction:column; gap:8px; align-items:flex-end;
+    font-family:'Space Grotesk',sans-serif; font-size:16px; font-weight:700; min-width:28px; }
+  .status { display:flex; flex-direction:column; align-items:center; gap:4px; width:70px; flex-shrink:0; }
+  .badge { font-size:10px; font-weight:800; color:#0B0E14; background:var(--accent); border-radius:4px; padding:2px 6px; }
+  .ftchip { font-size:10px; font-weight:800; color:var(--quiet); border:1px solid #2A3240; border-radius:4px; padding:3px 7px; }
+  .meta { font-size:11px; font-weight:700; color:var(--quiet); text-align:center; }
+  .time { font-size:13px; font-weight:700; }
+  .empty, .error { font-size:13px; color:var(--quiet); background:var(--card); border:1px dashed var(--line);
+    border-radius:14px; padding:16px; text-align:center; }
+  .stamp { font-size:11px; color:var(--quiet); text-align:center; padding-top:4px; }
+  .skel { height:70px; border-radius:14px; background:linear-gradient(90deg,#161C26 25%,#1D2430 50%,#161C26 75%);
+    background-size:200% 100%; animation:sh 1.2s infinite; }
+  @keyframes sh { from{background-position:200% 0} to{background-position:-200% 0} }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="scroll">
+    <div class="head">
+      <div>
+        <div class="overline" id="dateLabel"></div>
+        <h1>Scores</h1>
+      </div>
+      <div class="livepill"><span class="dot"></span><span id="liveCount">0 LIVE</span></div>
+    </div>
+    <div class="days" id="dayChips"></div>
+    <div class="chips" id="countryChips"></div>
+    <div class="chips" id="sportChips"></div>
+    <div id="content"><div class="skel"></div></div>
+    <div class="stamp" id="stamp">Loading…</div>
+  </div>
+</div>
+<script>
+const LEAGUES = [
+  { id:'nba',  label:'NBA',            path:'basketball/nba',            country:'us', sport:'basketball' },
+  { id:'nfl',  label:'NFL',            path:'football/nfl',              country:'us', sport:'football' },
+  { id:'nhl',  label:'NHL',            path:'hockey/nhl',                country:'ca', sport:'hockey' },
+  { id:'mlb',  label:'MLB',            path:'baseball/mlb',              country:'us', sport:'baseball' },
+  { id:'epl',  label:'PREMIER LEAGUE', path:'soccer/eng.1',              country:'uk', sport:'soccer' },
+  { id:'ucl',  label:'CHAMPIONS LEAGUE', path:'soccer/uefa.champions',   country:'uk', sport:'soccer' },
+  { id:'mls',  label:'MLS',            path:'soccer/usa.1',              country:'us', sport:'soccer' },
+  { id:'afl',  label:'AFL',            path:'australian-football/afl',   country:'au', sport:'afl' },
+  { id:'nrl',  label:'NRL',            path:'rugby-league/3',            country:'au', sport:'rugby' }
+];
+const COUNTRIES = [ ['all','All'], ['us','USA'], ['ca','Canada'], ['uk','UK'], ['au','Australia'] ];
+const SPORTS = [ ['all','All sports'], ['basketball','Basketball'], ['football','Football'], ['soccer','Soccer'],
+  ['hockey','Hockey'], ['baseball','Baseball'], ['afl','Aussie Rules'], ['rugby','Rugby League'] ];
+const DAYS = [ [-1,'Yesterday'], [0,'Today'], [1,'Tomorrow'] ];
+const state = { country:'all', sport:'all', day:0, data:{}, errors:{} };
+let timer = null;
+
+function dateFor(offset) { const d = new Date(); d.setDate(d.getDate() + offset); return d; }
+function ymd(d) { return d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0'); }
+
+function chipRow(el, items, key, onPick) {
+  el.innerHTML = '';
+  for (const [id, label] of items) {
+    const b = document.createElement('button');
+    b.className = 'chip' + (String(state[key]) === String(id) ? ' on' : '');
+    b.textContent = label;
+    b.onclick = () => { onPick(id); };
+    el.appendChild(b);
+  }
+}
+
+function renderChips() {
+  chipRow(document.getElementById('countryChips'), COUNTRIES, 'country', id => { state.country = id; render(); });
+  chipRow(document.getElementById('sportChips'), SPORTS, 'sport', id => { state.sport = id; render(); });
+  chipRow(document.getElementById('dayChips'), DAYS, 'day', id => { state.day = Number(id); refresh(true); });
+}
+
+async function fetchLeague(lg) {
+  // For "Today", omit the date: ESPN then returns the current slate (incl. live games),
+  // which matters when the user's local date is ahead of US time.
+  const url = 'https://site.api.espn.com/apis/site/v2/sports/' + lg.path + '/scoreboard' +
+    (state.day === 0 ? '' : '?dates=' + ymd(dateFor(state.day)));
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    state.data[lg.id] = (j.events || []).map(ev => {
+      const comp = (ev.competitions || [])[0] || {};
+      const cs = comp.competitors || [];
+      const home = cs.find(c => c.homeAway === 'home') || cs[0] || {};
+      const away = cs.find(c => c.homeAway === 'away') || cs[1] || {};
+      const st = (ev.status && ev.status.type) || {};
+      return {
+        state: st.state || 'pre',
+        detail: st.shortDetail || st.detail || '',
+        date: ev.date,
+        home: { name: (home.team && (home.team.shortDisplayName || home.team.displayName)) || '—',
+                logo: home.team && home.team.logo, score: home.score },
+        away: { name: (away.team && (away.team.shortDisplayName || away.team.displayName)) || '—',
+                logo: away.team && away.team.logo, score: away.score }
+      };
+    });
+    delete state.errors[lg.id];
+  } catch (e) { state.errors[lg.id] = true; state.data[lg.id] = state.data[lg.id] || []; }
+}
+
+function teamRow(t) {
+  const img = t.logo ? '<img class="logo" src="' + t.logo + '" alt="">' : '<span class="logo"></span>';
+  return '<div class="team">' + img + '<span class="nm">' + t.name + '</span></div>';
+}
+
+function card(g) {
+  const live = g.state === 'in', done = g.state === 'post';
+  let right;
+  if (live) right = '<div class="status"><span class="badge">LIVE</span><span class="meta">' + g.detail + '</span></div>';
+  else if (done) right = '<div class="status"><span class="ftchip">FINAL</span></div>';
+  else {
+    const t = g.date ? new Date(g.date).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' }) : '';
+    right = '<div class="status"><span class="time">' + t + '</span><span class="meta">local time</span></div>';
+  }
+  const scores = (live || done)
+    ? '<div class="scores"><span>' + (g.home.score ?? '') + '</span><span>' + (g.away.score ?? '') + '</span></div>' : '';
+  return '<div class="card' + (live ? ' live' : '') + '"><div class="teams">' +
+    teamRow(g.home) + teamRow(g.away) + '</div>' + scores + right + '</div>';
+}
+
+function render() {
+  renderChips();
+  const d = dateFor(state.day);
+  document.getElementById('dateLabel').textContent = state.day === 0 ? 'RIGHT NOW · GAME DAY' :
+    d.toLocaleDateString([], { weekday:'long', month:'short', day:'numeric' }).toUpperCase().replace(',', ' ·');
+  const box = document.getElementById('content');
+  let html = '', liveTotal = 0;
+  for (const lg of LEAGUES) {
+    if (state.country !== 'all' && lg.country !== state.country) continue;
+    if (state.sport !== 'all' && lg.sport !== state.sport) continue;
+    const games = state.data[lg.id] || [];
+    const liveN = games.filter(g => g.state === 'in').length;
+    liveTotal += liveN;
+    if (state.errors[lg.id]) {
+      html += '<div class="section"><div class="seclabel">' + lg.label + '</div><div class="error">Couldn’t load this league right now.</div></div>';
+    } else if (games.length) {
+      html += '<div class="section"><div class="seclabel">' + lg.label + (liveN ? ' · <em>' + liveN + ' LIVE</em>' : '') +
+        '</div>' + games.map(card).join('') + '</div>';
+    }
+  }
+  box.innerHTML = html || '<div class="empty">No games for this day and filter — try another day, country or sport.</div>';
+  document.getElementById('liveCount').textContent = liveTotal + ' LIVE';
+}
+
+async function refresh(showSkeleton) {
+  if (showSkeleton) document.getElementById('content').innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+  await Promise.all(LEAGUES.map(fetchLeague));
+  render();
+  document.getElementById('stamp').textContent =
+    'Auto-refreshes every 30 s · updated ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit', second:'2-digit' });
+}
+
+renderChips();
+refresh(true);
+timer = setInterval(() => { if (state.day === 0) refresh(false); }, 30000);
+</script>
+</body>
+</html>
