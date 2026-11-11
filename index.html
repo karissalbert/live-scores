@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pulse — live scores</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#0F1626">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0F1626; --panel:#1A2336; --panel2:#202C44; --line:#2A3650; --ink:#F2F5FB; --quiet:#93A1BC;
@@ -319,6 +323,7 @@ document.getElementById('content').addEventListener('keydown', e => {
 renderChips();
 refresh(true);
 setInterval(() => { if (state.day === 0 && !document.hidden) refresh(false); }, 30000);
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 </script>
 </body>
 </html>
