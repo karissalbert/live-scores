@@ -27,7 +27,23 @@
   .seclabel { font-size:11px; font-weight:700; letter-spacing:1.5px; color:var(--quiet); }
   .seclabel em { font-style:normal; color:var(--accent); }
   .card { display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--line);
-    border-radius:14px; padding:13px 15px; }
+    border-radius:14px; padding:13px 15px; cursor:pointer; }
+  .card:hover { border-color:#3A4556; }
+  .back { display:inline-flex; align-items:center; gap:6px; background:none; border:none; color:var(--ink);
+    font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; padding:0; min-height:44px; }
+  .dcard { display:flex; flex-direction:column; gap:16px; background:var(--card); border:1px solid #2E5C41;
+    border-radius:18px; padding:20px 16px; }
+  .drow { display:flex; justify-content:space-between; align-items:center; }
+  .dteam { display:flex; align-items:center; gap:10px; font-size:16px; font-weight:700; min-width:0; }
+  .dteam .logo { width:34px; height:34px; }
+  .dscore { font-family:'Space Grotesk',sans-serif; font-size:34px; font-weight:700; }
+  .watch { display:flex; align-items:center; justify-content:center; gap:8px; background:var(--accent);
+    color:#0B0E14; border-radius:12px; font-size:14px; font-weight:800; min-height:48px; text-decoration:none; }
+  .lines { width:100%; border-collapse:collapse; font-size:12px; }
+  .lines th, .lines td { padding:6px 4px; text-align:center; color:var(--quiet); border-bottom:1px solid var(--line); }
+  .lines td.nm { text-align:left; font-weight:600; color:var(--ink); }
+  .lines td.sc { color:var(--ink); font-weight:700; font-family:'Space Grotesk',sans-serif; }
+  .dmeta { font-size:12px; color:var(--quiet); text-align:center; }
   .card.live { border-color:#2E5C41; }
   .teams { display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; }
   .team { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; }
@@ -120,13 +136,19 @@ async function fetchLeague(lg) {
       const away = cs.find(c => c.homeAway === 'away') || cs[1] || {};
       const st = (ev.status && ev.status.type) || {};
       return {
+        id: String(ev.id),
         state: st.state || 'pre',
         detail: st.shortDetail || st.detail || '',
         date: ev.date,
+        link: (ev.links && ev.links[0] && ev.links[0].href) || '',
+        venue: (comp.venue && comp.venue.fullName) || '',
+        nets: (((comp.broadcasts || [])[0] || {}).names || []).join(', '),
         home: { name: (home.team && (home.team.shortDisplayName || home.team.displayName)) || '—',
-                logo: home.team && home.team.logo, score: home.score },
+                logo: home.team && home.team.logo, score: home.score,
+                lines: (home.linescores || []).map(l => l.value) },
         away: { name: (away.team && (away.team.shortDisplayName || away.team.displayName)) || '—',
-                logo: away.team && away.team.logo, score: away.score }
+                logo: away.team && away.team.logo, score: away.score,
+                lines: (away.linescores || []).map(l => l.value) }
       };
     });
     delete state.errors[lg.id];
@@ -138,7 +160,7 @@ function teamRow(t) {
   return '<div class="team">' + img + '<span class="nm">' + t.name + '</span></div>';
 }
 
-function card(g) {
+function card(g, lgId) {
   const live = g.state === 'in', done = g.state === 'post';
   let right;
   if (live) right = '<div class="status"><span class="badge">LIVE</span><span class="meta">' + g.detail + '</span></div>';
@@ -149,12 +171,49 @@ function card(g) {
   }
   const scores = (live || done)
     ? '<div class="scores"><span>' + (g.home.score ?? '') + '</span><span>' + (g.away.score ?? '') + '</span></div>' : '';
-  return '<div class="card' + (live ? ' live' : '') + '"><div class="teams">' +
+  return '<div class="card' + (live ? ' live' : '') + '" data-lg="' + lgId + '" data-id="' + g.id + '"><div class="teams">' +
     teamRow(g.home) + teamRow(g.away) + '</div>' + scores + right + '</div>';
+}
+
+function renderDetail() {
+  const lg = LEAGUES.find(l => l.id === state.sel.lg);
+  const g = (state.data[state.sel.lg] || []).find(x => x.id === state.sel.id);
+  const box = document.getElementById('content');
+  if (!g || !lg) { state.sel = null; render(); return; }
+  const live = g.state === 'in', done = g.state === 'post';
+  const statusHtml = live
+    ? '<span class="badge">LIVE</span><span class="meta" style="margin-left:8px">' + g.detail + '</span>'
+    : done ? '<span class="ftchip">FINAL</span>'
+    : '<span class="meta">' + (g.date ? new Date(g.date).toLocaleString([], { weekday:'short', hour:'numeric', minute:'2-digit' }) : '') + ' · local time</span>';
+  const img = t => t.logo ? '<img class="logo" src="' + t.logo + '" alt="">' : '<span class="logo"></span>';
+  const teamRows =
+    '<div class="drow"><div class="dteam">' + img(g.away) + '<span class="nm">' + g.away.name + '</span></div><span class="dscore">' + (g.away.score ?? '') + '</span></div>' +
+    '<div class="drow"><div class="dteam">' + img(g.home) + '<span class="nm">' + g.home.name + '</span></div><span class="dscore">' + (g.home.score ?? '') + '</span></div>';
+  const n = Math.max(g.home.lines.length, g.away.lines.length);
+  let lines = '';
+  if (n > 0) {
+    let head = '<tr><th></th>'; for (let i = 1; i <= n; i++) head += '<th>' + i + '</th>'; head += '<th>T</th></tr>';
+    const row = t => '<tr><td class="nm">' + t.name + '</td>' +
+      Array.from({ length: n }, (_, i) => '<td class="sc">' + (t.lines[i] ?? '–') + '</td>').join('') +
+      '<td class="sc">' + (t.score ?? '') + '</td></tr>';
+    lines = '<table class="lines">' + head + row(g.away) + row(g.home) + '</table>';
+  }
+  const label = live ? 'Watch match live' : done ? 'Recap &amp; highlights' : 'Match preview';
+  const watch = g.link
+    ? '<a class="watch" target="_blank" rel="noopener" href="' + g.link + '">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>' + label + '</a>' +
+      '<div class="dmeta">Opens the official live game center' + (g.nets ? ' · on TV: ' + g.nets : '') + '</div>'
+    : '';
+  const meta = g.venue ? '<div class="dmeta" style="margin-top:10px">' + g.venue + '</div>' : '';
+  box.innerHTML = '<button class="back" id="backBtn">← All games</button>' +
+    '<div class="section"><div class="seclabel">' + lg.label + '</div><div class="dcard">' +
+    '<div style="text-align:center">' + statusHtml + '</div>' + teamRows + lines + watch + '</div>' + meta + '</div>';
+  document.getElementById('backBtn').onclick = () => { state.sel = null; render(); };
 }
 
 function render() {
   renderChips();
+  if (state.sel) { renderDetail(); return; }
   const d = dateFor(state.day);
   document.getElementById('dateLabel').textContent = state.day === 0 ? 'RIGHT NOW · GAME DAY' :
     d.toLocaleDateString([], { weekday:'long', month:'short', day:'numeric' }).toUpperCase().replace(',', ' ·');
@@ -170,7 +229,7 @@ function render() {
       html += '<div class="section"><div class="seclabel">' + lg.label + '</div><div class="error">Couldn’t load this league right now.</div></div>';
     } else if (games.length) {
       html += '<div class="section"><div class="seclabel">' + lg.label + (liveN ? ' · <em>' + liveN + ' LIVE</em>' : '') +
-        '</div>' + games.map(card).join('') + '</div>';
+        '</div>' + games.map(g => card(g, lg.id)).join('') + '</div>';
     }
   }
   box.innerHTML = html || '<div class="empty">No games for this day and filter — try another day, country or sport.</div>';
@@ -185,6 +244,10 @@ async function refresh(showSkeleton) {
     'Auto-refreshes every 30 s · updated ' + new Date().toLocaleTimeString([], { hour:'numeric', minute:'2-digit', second:'2-digit' });
 }
 
+document.getElementById('content').addEventListener('click', e => {
+  const c = e.target.closest('[data-id]');
+  if (c) { state.sel = { lg: c.dataset.lg, id: c.dataset.id }; render(); window.scrollTo(0, 0); }
+});
 renderChips();
 refresh(true);
 timer = setInterval(() => { if (state.day === 0) refresh(false); }, 30000);
